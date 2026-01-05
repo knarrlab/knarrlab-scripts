@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ─────────────────────────────────────────────
+# Ensure we are inside knarrlab/
+# ─────────────────────────────────────────────
+is_inside_knarrlab() {
+  local dir
+  dir="$(pwd -P)"
+
+  while [[ "$dir" != "/" ]]; do
+    if [[ "$(basename "$dir")" == "knarrlab" ]]; then
+      KNARRLAB_ROOT="$dir"
+      export KNARRLAB_ROOT
+      return 0
+    fi
+    dir="$(dirname "$dir")"
+  done
+
+  return 1
+}
+
+if ! is_inside_knarrlab; then
+  echo "Error: this command must be run from inside the knarrlab/ directory tree"
+  exit 1
+fi
+
+# ─────────────────────────────────────────────
+# Args
+# ─────────────────────────────────────────────
+if [[ $# -lt 1 ]]; then
+  echo "Usage: new-project <project-name> [--git]"
+  exit 1
+fi
+
+PROJECT_NAME="$1"
+INIT_GIT=0
+[[ "${2:-}" == "--git" ]] && INIT_GIT=1
+
+# ─────────────────────────────────────────────
+# Paths (derived from knarrlab root)
+# ─────────────────────────────────────────────
+PROJECTS_DIR="$KNARRLAB_ROOT/projects"
+PROJECT_DIR="$PROJECTS_DIR/$PROJECT_NAME"
+
+# ─────────────────────────────────────────────
+# Validation
+# ─────────────────────────────────────────────
+if [[ ! "$PROJECT_NAME" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+  echo "Error: project name must be kebab-case"
+  exit 1
+fi
+
+if [[ -e "$PROJECT_DIR" ]]; then
+  echo "Error: project already exists: $PROJECT_DIR"
+  exit 1
+fi
+
+# ─────────────────────────────────────────────
+# Create structure
+# ─────────────────────────────────────────────
+mkdir -p "$PROJECT_DIR/bin" "$PROJECT_DIR/docs"
+
+# README
+cat > "$PROJECT_DIR/README.md" <<EOF
+# $PROJECT_NAME
+
+## What
+Short description.
+
+## Why
+Why this exists.
+
+## Install
+\`\`\`bash
+ln -s \$PWD/bin/$PROJECT_NAME ~/.local/bin/$PROJECT_NAME
+\`\`\`
+
+## Usage
+\`\`\`bash
+$PROJECT_NAME
+\`\`\`
+EOF
+
+# LICENSE
+cat > "$PROJECT_DIR/LICENSE" <<EOF
+MIT License
+
+Copyright (c) $(date +%Y)
+EOF
+
+# .gitignore
+cat > "$PROJECT_DIR/.gitignore" <<'EOF'
+*.swp
+*.tmp
+*.bak
+.DS_Store
+EOF
+
+# Executable stub
+cat > "$PROJECT_DIR/bin/$PROJECT_NAME" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "TODO: implement"
+EOF
+
+chmod +x "$PROJECT_DIR/bin/$PROJECT_NAME"
+
+# ─────────────────────────────────────────────
+# Hardened git init
+# ─────────────────────────────────────────────
+if [[ $INIT_GIT -eq 1 ]]; then
+  if ! command -v git >/dev/null; then
+    echo "Error: git not installed"
+    exit 1
+  fi
+
+  if [[ -z "$(git config --global user.name || true)" ]] \
+  || [[ -z "$(git config --global user.email || true)" ]]; then
+    echo "Error: git user.name and user.email must be set"
+    exit 1
+  fi
+
+  cd "$PROJECT_DIR"
+  git init
+  git branch -M main
+  git add .
+  git commit -m "Initial project scaffold"
+fi
+
+echo "Project created at: $PROJECT_DIR"
+
